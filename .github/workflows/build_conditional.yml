@@ -56,7 +56,7 @@ jobs:
             echo "exists=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Checkout Linux Kernel source
+      - name: Build Linux Kernel
         if: ${{ steps.check.outputs.exists }} == 'false'
         run: |
           git clone --depth 1 --branch v${{ inputs.kernel_version }} https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git linux-source
@@ -69,14 +69,21 @@ jobs:
           CONFIG_HASH=$(echo -n "${{ inputs.defconfig }}" | md5sum | cut -d ' ' -f 1)
           echo "config_hash=${CONFIG_HASH}" >> $GITHUB_ENV
 
-      - name: Archive Kernel Artifacts
+      - name: Archive Kernel Artifact
         if: ${{ steps.check.outputs.exists }} == 'false'
         uses: actions/upload-artifact@v4
         with:
           name: linux-kernel-${{ inputs.kernel_version }}-${{ env.config_hash }}
           path: linux-source/arch/x86/boot/bzImage
 
-  retrieve-kernel:
+      - name: Archive Kernel Artifact FC
+        if: ${{ steps.check.outputs.exists }} == 'false'
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-kernel-fc-${{ inputs.kernel_version }}-${{ env.config_hash }}
+          path: linux-source/vmlinux
+
+  build-nginx:
     needs: check-artifact
     runs-on: base-dind-2204-amd64
     steps:
@@ -85,17 +92,37 @@ jobs:
         run: |
           CONFIG_HASH=$(echo -n "${{ inputs.defconfig }}" | md5sum | cut -d ' ' -f 1)
           echo "KERNEL_ARTIFACT=linux-kernel-${{ inputs.kernel_version }}-${CONFIG_HASH}" >> $GITHUB_ENV
+          echo "KERNEL_ARTIFACT_FC=linux-kernel-fc-${{ inputs.kernel_version }}-${CONFIG_HASH}" >> $GITHUB_ENV
 
-      - name: Download Kernel Image
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download Kernel Image QEMU
         uses: actions/download-artifact@v4
         with:
           name: ${{ env.KERNEL_ARTIFACT }}
           path: ./kernel-output
 
+      - name: Download Kernel Image FC
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.KERNEL_ARTIFACT_FC }}
+          path: ./kernel-output
+
       - name: List Downloaded Files
         run: ls -l ./kernel-output
 
-      #- name: Use Kernel Image (example)
-      #  run: |
-      #    cp ./kernel-output/bzImage /some/destination/
+      - name: Build nginx QEMU
+        run: |
+          cp kernel-output/bzImage nginx && \
+          cd nginx && docker build -f nginx/bunnyfile \
+                 -t harbor.nbfc.io/nubificus/bunny-nginx-qemu:latest .
+          docker push harbor.nbfc.io/nubificus/bunny-nginx-qemu:latest
+
+      - name: Build nginx FC
+        run: |
+          cp kernel-output/vmlinux nginx && \
+          cd nginx && docker build -f nginx/bunnyfile \
+                 -t harbor.nbfc.io/nubificus/bunny-nginx-fc:latest .
+          docker push harbor.nbfc.io/nubificus/bunny-nginx-fc:latest
 
