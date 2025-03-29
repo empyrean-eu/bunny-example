@@ -9,7 +9,7 @@ jobs:
   build-linux:
     uses: empyrean-eu/bunny-example/.github/workflows/build_conditional.yml@main
     with:
-      kernel_version: "6.12"
+      kernel_version: "6.13"
       defconfig: |
         CONFIG_TMPFS=y
         CONFIG_POSIX_TIMERS=y
