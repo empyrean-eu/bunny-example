@@ -51,11 +51,10 @@ jobs:
         CONFIG_FRAME_WARN=1024
         CONFIG_DEBUG_MEMORY_INIT=y
         CONFIG_UNWINDER_FRAME_POINTER=y
+    secrets: inherit
 
   #retrieve-kernel:
   #  needs: build-linux
   #  uses: empyrean-eu/bunny-example/.github/workflows/get_artifact.yml@main
   #  #with:
   #    #kernel_version: ${{ inputs.kernel_version }}
-
-
