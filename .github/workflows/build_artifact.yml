@@ -1,0 +1,44 @@
+name: Build Linux Kernel
+
+on:
+  workflow_call:
+    inputs:
+      kernel_version:
+        description: 'Linux Kernel version to build'
+        required: true
+        type: string
+      defconfig:
+        description: 'Kernel defconfig contents'
+        required: true
+        type: string
+
+jobs:
+  build-kernel:
+    runs-on: base-dind-2204-amd64
+    steps:
+      - name: Checkout Linux Kernel source
+        run: |
+          git clone --depth 1 --branch v${{ inputs.kernel_version }} https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git linux-source
+          cd linux-source
+
+      - name: Set up Kernel Build Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential flex bison libssl-dev libelf-dev bc
+
+      - name: Configure Kernel
+        run: |
+          cd linux-source
+          echo "${{ inputs.defconfig }}" > .config
+          make olddefconfig
+
+      - name: Build Kernel
+        run: |
+          cd linux-source
+          make -j$(nproc)
+
+      - name: Archive Kernel Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-kernel-${{ inputs.kernel_version }}
+          path: linux-source/arch/x86/boot/bzImage

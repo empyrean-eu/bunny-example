@@ -1,0 +1,73 @@
+name: Retrieve Kernel Image
+
+on:
+  workflow_call:
+    inputs:
+      kernel_version:
+        description: 'Linux Kernel version to get'
+        required: false
+        type: string
+  workflow_run:
+    workflows: ["Build Linux Kernel"]
+    types:
+      - completed
+
+jobs:
+  download-kernel:
+    runs-on: base-dind-2204-amd64
+    steps:
+      - name: Determine Kernel Version from artifacts
+        id: list-artifacts
+        run: |
+          echo "Fetching artifacts from current run..."
+          ARTIFACTS=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts" \
+            | jq -r '.artifacts[].name')
+
+          echo "Available artifacts: $ARTIFACTS"
+          
+          if [ -n "${{ inputs.kernel_version }}" ]; then
+            echo "Using provided kernel_version: ${{ inputs.kernel_version }}"
+            echo "KERNEL_VERSION=${{ inputs.kernel_version }}" >> $GITHUB_ENV
+          else
+            MATCHED_ARTIFACT=$(echo "$ARTIFACTS" | grep 'linux-kernel-' | head -n 1)
+            if [ -z "$MATCHED_ARTIFACT" ]; then
+              echo "No kernel artifacts found!"
+              exit 1
+            fi
+            echo "Found artifact: $MATCHED_ARTIFACT"
+            echo "KERNEL_VERSION=${MATCHED_ARTIFACT#linux-kernel-}" >> $GITHUB_ENV
+          fi
+
+#      - name: Determine Kernel Version
+#        id: kernel_version
+#        run: |
+#          if [ -n "${{ inputs.kernel_version }}" ]; then
+#            echo "Using provided kernel_version: ${{ inputs.kernel_version }}"
+#            echo "KERNEL_VERSION=${{ inputs.kernel_version }}" >> $GITHUB_ENV
+#          else
+#            echo "No kernel_version input provided, checking artifacts..."
+#            ARTIFACT_NAME=$(gh run list --workflow "Build Linux Kernel" --json artifacts -q '.artifacts[].name' | grep 'linux-kernel-' | head -n 1)
+#            if [ -z "$ARTIFACT_NAME" ]; then
+#              echo "No kernel artifacts found!"
+#              exit 1
+#            fi
+#            echo "Found artifact: $ARTIFACT_NAME"
+#            echo "KERNEL_VERSION=${ARTIFACT_NAME#linux-kernel-}" >> $GITHUB_ENV
+#          fi
+#        env:
+#          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download Kernel Image
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-kernel-${{ env.KERNEL_VERSION }}
+          path: ./kernel-output
+
+      - name: List Downloaded Files
+        run: ls -l ./kernel-output
+
+      #- name: Use Kernel Image (example)
+      #  run: |
+      #    cp ./kernel-output/bzImage /some/destination/

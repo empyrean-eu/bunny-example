@@ -1,0 +1,101 @@
+name: Build or Retrieve Linux Kernel
+
+on:
+  workflow_call:
+    inputs:
+      kernel_version:
+        description: 'Linux Kernel version to build'
+        required: true
+        type: string
+      defconfig:
+        description: 'Kernel defconfig contents'
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      kernel_version:
+        description: 'Linux Kernel version to build'
+        required: true
+        type: string
+      defconfig:
+        description: 'Kernel defconfig contents'
+        required: true
+        type: string
+
+jobs:
+  check-artifact:
+    runs-on: base-dind-2204-amd64
+    steps:
+      - name: Check if Kernel Artifact Exists
+        id: check
+        run: |
+          echo "Checking for existing artifacts..."
+
+          # Compute the hash of the defconfig contents
+          CONFIG_HASH=$(echo -n "${{ inputs.defconfig }}" | md5sum | cut -d ' ' -f 1)
+          echo "Config hash: $CONFIG_HASH"
+
+          # Build the artifact name based on kernel_version and defconfig hash
+          EXPECTED_ARTIFACT="linux-kernel-${{ inputs.kernel_version }}-${CONFIG_HASH}"
+          echo "Expected artifact name: $EXPECTED_ARTIFACT"
+
+          # List artifacts from previous successful runs of the 'Build Linux Kernel' workflow
+          ARTIFACTS=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/runs?status=success&workflow=Build%20Linux%20Kernel" \
+            | jq -r '.workflow_runs[].artifacts_url' | xargs -I {} curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            {} \
+            | jq -r '.artifacts[].name')
+
+          if echo "$ARTIFACTS" | grep -q "$EXPECTED_ARTIFACT"; then
+            echo "Kernel artifact already exists! Skipping build."
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "No matching artifact found. Proceeding with build."
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Checkout Linux Kernel source
+        if: ${{ steps.check.outputs.exists }} == 'false'
+        run: |
+          git clone --depth 1 --branch v${{ inputs.kernel_version }} https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git linux-source
+          cd linux-source
+          sudo apt-get update
+          sudo apt-get install -y build-essential flex bison libssl-dev libelf-dev bc
+          echo "${{ inputs.defconfig }}" > .config
+          make olddefconfig
+          make -j$(nproc)
+          CONFIG_HASH=$(echo -n "${{ inputs.defconfig }}" | md5sum | cut -d ' ' -f 1)
+          echo "config_hash=${CONFIG_HASH}" >> $GITHUB_ENV
+
+      - name: Archive Kernel Artifacts
+        if: ${{ steps.check.outputs.exists }} == 'false'
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-kernel-${{ inputs.kernel_version }}-${{ env.config_hash }}
+          path: linux-source/arch/x86/boot/bzImage
+
+  retrieve-kernel:
+    needs: check-artifact
+    runs-on: base-dind-2204-amd64
+    steps:
+      - name: Determine Kernel Version and Config Hash
+        id: kernel_version
+        run: |
+          CONFIG_HASH=$(echo -n "${{ inputs.defconfig }}" | md5sum | cut -d ' ' -f 1)
+          echo "KERNEL_ARTIFACT=linux-kernel-${{ inputs.kernel_version }}-${CONFIG_HASH}" >> $GITHUB_ENV
+
+      - name: Download Kernel Image
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.KERNEL_ARTIFACT }}
+          path: ./kernel-output
+
+      - name: List Downloaded Files
+        run: ls -l ./kernel-output
+
+      #- name: Use Kernel Image (example)
+      #  run: |
+      #    cp ./kernel-output/bzImage /some/destination/
+
