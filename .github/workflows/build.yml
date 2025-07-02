@@ -10,12 +10,13 @@ jobs:
   build-linux:
     uses: empyrean-eu/bunny-example/.github/workflows/build_conditional.yml@main
     with:
-      kernel_version: "6.13"
+      kernel_version: "6.14"
       defconfig: |
-        CONFIG_TMPFS=y
         CONFIG_POSIX_TIMERS=y
-        CONFIG_HIGH_RES_TIMERS=y
         CONFIG_NAMESPACES=y
+        CONFIG_PTP_1588_CLOCK_MOCK=y
+        CONFIG_HIGH_RES_TIMERS=y
+        CONFIG_BLK_DEV_INITRD=y
         CONFIG_EXPERT=y
         CONFIG_HYPERVISOR_GUEST=y
         CONFIG_PARAVIRT=y
@@ -38,20 +39,25 @@ jobs:
         CONFIG_SERIAL_8250_CONSOLE=y
         CONFIG_SERIAL_8250_NR_UARTS=1
         CONFIG_SERIAL_8250_RUNTIME_UARTS=1
-        CONFIG_PTP_1588_CLOCK_MOCK=y
         CONFIG_VIRT_DRIVERS=y
         CONFIG_VIRTIO_PCI=y
         CONFIG_VIRTIO_MMIO=y
         CONFIG_VIRTIO_MMIO_CMDLINE_DEVICES=y
+        CONFIG_VHOST_NET=y
         CONFIG_EXT2_FS=y
         CONFIG_EXT2_FS_XATTR=y
         CONFIG_EXT2_FS_POSIX_ACL=y
         CONFIG_EXT2_FS_SECURITY=y
+        CONFIG_TMPFS=y
         CONFIG_CRYPTO=y
         CONFIG_CRYPTO_CRC32C=y
+        CONFIG_CONSOLE_LOGLEVEL_DEFAULT=4
         CONFIG_FRAME_WARN=1024
         CONFIG_DEBUG_MEMORY_INIT=y
         CONFIG_UNWINDER_FRAME_POINTER=y
+        CONFIG_NET_9P=y
+        CONFIG_NET_9P_VIRTIO=y
+        CONFIG_NET_9P_FS=y
     secrets: inherit
 
   #retrieve-kernel:
